@@ -9,6 +9,9 @@ reduce amout of size and compressed by zstd
 ROS1  
 http://wiki.ros.org/ROS/Installation  
   
+Eigen3
+> sudo apt-get install libeigen3-dev
+  
 HDF5  
 > sudo apt-get install libhdf5-dev
 
