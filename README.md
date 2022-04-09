@@ -7,6 +7,8 @@ reduce amout of size and compressed by zstd
 
 # Dependency
 ROS1  
+http://wiki.ros.org/ROS/Installation  
+  
 HDF5  
 zstd  
 
