@@ -23,5 +23,5 @@ pointcloud: pointcloud2 message
 pointcloud_hdf5: hdf5 message converted from pointcloud2  
 
 # Parameter
-compressed: true or false ( default: false )
+compressed: true or false ( default: false )  
 compressed_level: int ( default: 3 ) compressed level for zstd  
