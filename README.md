@@ -10,7 +10,10 @@ ROS1
 http://wiki.ros.org/ROS/Installation  
   
 HDF5  
+> sudo apt-get install libhdf5-dev
+
 zstd  
+> sudo apt-get install zstd
 
 # Install and build
 clone to your ros work space and catkin_make
