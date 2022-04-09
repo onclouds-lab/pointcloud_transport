@@ -1,0 +1,11 @@
+<launch>
+  <node pkg="pointcloud_transport" type="pointcloud_transport_pcl2hdf_node" name="pointcloud_transport_pcl2hdf">
+    <remap from="~pointcloud" to="/kitti/velo/pointcloud" />
+    <param name="compressed" value="true" />
+  </node>
+
+  <node pkg="pointcloud_transport" type="pointcloud_transport_hdf2pcl_node" name="pointcloud_transport_hdf2pcl" output="screen" >
+    <remap from="~pointcloud_hdf" to="/pointcloud_transport_pcl2hdf/pointcloud_hdf" />
+  </node>
+
+</launch>
