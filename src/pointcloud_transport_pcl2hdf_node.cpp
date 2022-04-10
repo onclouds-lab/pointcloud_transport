@@ -50,7 +50,7 @@ void pointcloud_cb( const sensor_msgs::PointCloud2ConstPtr& pointsMsg){
     HDF5_msg.type =pcl_type;
     HDF5_msg.compressed = hdf5data->getCompressed();
     HDF5_msg.compressed_level = hdf5data->getCompressed_level();
-    hdf5data->get_file_image(HDF5_msg.hdf5data);
+    hdf5data->get_file_image2(HDF5_msg.hdf5data);
 
     //publish
     hdf5_pub.publish(HDF5_msg);

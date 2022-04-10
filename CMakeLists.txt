@@ -23,6 +23,16 @@ find_package(MPI REQUIRED)
 message("HDF5_INCLUDE_DIR = ${HDF5_INCLUDE_DIR}")
 message("HDF5_LIB_DIR = ${HDF5_LIBRARIES}")
 
+#
+find_package(CUDA REQUIRED)
+set(CUDA_INCLUDE_DIR "/usr/local/cuda/include")
+message("CUDA_INCLUDE_DIR = ${CUDA_INCLUDE_DIR}")
+message("CUDA_LIB_DIR = ${CUDA_LIBRARIES}")
+#find_package(NVCOMP REQUIRED)
+#message("NVCOMP_INCLUDE_DIR = ${NVCOMP_INCLUDE_DIR}")
+#message("NVCOMP_LIB_DIR = ${NVCOMP_LIBRARIES}")
+set(NVCOMP_INCLUDE_DIR "/usr/local/include/nvcomp")
+
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
 ## See http://ros.org/doc/api/catkin/html/user_guide/setup_dot_py.html
@@ -125,6 +135,7 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIR}
   ${HDF5_INCLUDE_DIR}
+  ${CUDA_INCLUDE_DIR}
 )
 
 ## Declare a C++ library
@@ -159,6 +170,8 @@ target_link_libraries(${PROJECT_NAME}_pcl2hdf_node
   MPI::MPI_CXX
   ${HDF5_LIBRARIES}
   ${HDF5_HL_LIBRARIES}
+  ${CUDA_LIBRARIES}
+  libnvcomp.so
   libzstd.so
 )
 
@@ -167,6 +180,8 @@ target_link_libraries(${PROJECT_NAME}_hdf2pcl_node
   MPI::MPI_CXX
   ${HDF5_LIBRARIES}
   ${HDF5_HL_LIBRARIES}
+  ${CUDA_LIBRARIES}
+  libnvcomp.so
   libzstd.so
 )
 
