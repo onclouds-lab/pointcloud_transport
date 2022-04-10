@@ -18,6 +18,9 @@ HDF5
 zstd  
 > sudo apt-get install zstd
 
+nvcomp  
+https://github.com/NVIDIA/nvcomp
+
 # Install and build
 clone to your ros work space and catkin_make
 
