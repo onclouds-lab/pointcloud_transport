@@ -16,7 +16,7 @@ HDF5
 > sudo apt-get install libhdf5-dev
 
 zstd  
-> sudo apt-get install zstd
+> sudo apt-get install libzstd-dev
 
 # Install and build
 clone to your ros work space and catkin_make
