@@ -377,25 +377,24 @@ private:
   void createNew( std::string hdf5name)
   {
     /* create the HDF5 file image first */
-    H5::FileAccPropList accPList=H5::FileAccPropList::DEFAULT;
-    // https://confluence.hdfgroup.org/display/HDF5/H5P_SET_FAPL_CORE
-    herr_t h5err=H5Pset_fapl_core(accPList.getId(),/* memory increment size: 4M */1<<20,/*backing_store*/false);
+    hid_t faplist_id = H5Pcreate(H5P_FILE_ACCESS);
+    herr_t h5err=H5Pset_fapl_core(faplist_id,/* memory increment size: 4M */1<<20,/*backing_store*/false);
     if(h5err<0) throw std::runtime_error("H5P_set_fapl_core failed.");
-    H5::H5File* h5file = new H5::H5File(hdf5name, H5F_ACC_TRUNC,H5::FileCreatPropList::DEFAULT,accPList);
+    hid_t fid = H5Fcreate(hdf5name.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, faplist_id);
 
     /* add data like usual */
     //H5::Group grp=h5file.createGroup("somegroup");
     /* ... */
 
     /* get the image */
-    h5file->flush(H5F_SCOPE_LOCAL); // necessary
-    ssize_t imgSize=H5Fget_file_image(h5file->getId(),NULL,0); // first call to determine size
+    H5Fflush(fid, H5F_SCOPE_LOCAL);
+    ssize_t imgSize=H5Fget_file_image(fid,NULL,0); // first call to determine size
     std::vector<char> buf(imgSize);
-    H5Fget_file_image(h5file->getId(),buf.data(),imgSize); // second call to actually copy the data into our buffer
+    H5Fget_file_image(fid,buf.data(),imgSize); // second call to actually copy the data into our buffer
 
     file_id = H5LTopen_file_image(buf.data(),imgSize,H5LT_FILE_IMAGE_OPEN_RW);
 
-    h5file->close();
+    H5Fclose(fid);
 
   }
 
