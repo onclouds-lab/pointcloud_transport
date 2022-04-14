@@ -19,6 +19,20 @@
 #include "zstd.h"
 #include "zstd_errors.h"
 
+// NvComp
+#include "nvcomp/lz4.hpp"
+#include "nvcomp.hpp"
+#include "nvcomp/nvcompManagerFactory.hpp"
+
+#define CUDA_CHECK(cond)                                                       \
+  do {                                                                         \
+    cudaError_t err = cond;                                                    \
+    if (err != cudaSuccess) {                                               \
+      std::cerr << "Failure" << std::endl;                                \
+      exit(1);                                                              \
+    }                                                                         \
+  } while (false)
+
 class hdf5frame {
 public:
   hdf5frame( int comp = false, int comp_lvl = 1 )
@@ -32,7 +46,7 @@ public:
   {
     std::cout << __func__ << ": binary( size " << buf.size() << " )" << std::endl;
     initialize(comp, comp_lvl);
-    read_file_image( buf );
+    read_file_image2( buf );
   }
   hdf5frame( std::string filename, int comp = false, int comp_lvl = 1 )
   {
@@ -51,7 +65,7 @@ public:
     std::vector<unsigned char> v_buf((std::istreambuf_iterator<char>(bin_file)), (std::istreambuf_iterator<char>()));
     bin_file.close();
 
-    read_file_image( v_buf );
+    read_file_image2( v_buf );
 
   }
 
@@ -95,6 +109,57 @@ public:
       size_t const cSize = ZSTD_compress(cBuff, cBuffSize, hdf5_img, imgSize, compressed_level);
       dst.resize(cSize);
       std::copy(cBuff, cBuff+cSize, dst.begin() );
+
+    } else {
+      dst.resize(imgSize);
+      std::copy(hdf5_img, hdf5_img+imgSize, dst.begin() );
+
+    }
+
+  }
+
+  void get_file_image2( std::vector<unsigned char>& dst ){
+    std::cout << __func__ <<std::endl;
+    //nessesary to flush
+    H5Fflush(file_id, H5F_SCOPE_LOCAL);
+
+    ssize_t imgSize=H5Fget_file_image(file_id,NULL,0); // first call to determine size
+    unsigned char* hdf5_img = new unsigned char[imgSize];
+    H5Fget_file_image(file_id,hdf5_img,imgSize); // second call to actually copy the data into our buffer
+
+    if( compressed ){
+
+      //copy host to gpu
+      uint8_t* device_input_ptrs;
+      CUDA_CHECK(cudaMalloc(&device_input_ptrs, imgSize));
+      CUDA_CHECK(cudaMemcpy(device_input_ptrs, hdf5_img, imgSize, cudaMemcpyDefault));      
+
+      cudaStream_t stream;
+      CUDA_CHECK(cudaStreamCreate(&stream));
+
+      const int chunk_size = 1 << 16;
+      nvcompType_t data_type = NVCOMP_TYPE_CHAR;
+
+      nvcomp::LZ4Manager nvcomp_manager{chunk_size, data_type, stream};
+      nvcomp::CompressionConfig comp_config = nvcomp_manager.configure_compression(imgSize);
+
+      uint8_t* comp_buffer;
+      CUDA_CHECK(cudaMalloc(&comp_buffer, comp_config.max_compressed_buffer_size));
+      nvcomp_manager.compress(device_input_ptrs, comp_buffer, comp_config);
+      ssize_t comp_data_len = nvcomp_manager.get_compressed_output_size(comp_buffer);
+
+      uint8_t* comp_host = new uint8_t[comp_data_len];
+      CUDA_CHECK(cudaMemcpy(comp_host, comp_buffer, comp_data_len, cudaMemcpyDefault));      
+
+      dst.resize(comp_data_len);
+      std::copy(comp_host, comp_host+comp_data_len, dst.begin() );
+
+      CUDA_CHECK(cudaStreamSynchronize(stream));
+
+      CUDA_CHECK(cudaFree(device_input_ptrs));
+      CUDA_CHECK(cudaFree(comp_buffer));
+
+      CUDA_CHECK(cudaStreamDestroy(stream));
 
     } else {
       dst.resize(imgSize);
@@ -312,25 +377,24 @@ private:
   void createNew( std::string hdf5name)
   {
     /* create the HDF5 file image first */
-    H5::FileAccPropList accPList=H5::FileAccPropList::DEFAULT;
-    // https://confluence.hdfgroup.org/display/HDF5/H5P_SET_FAPL_CORE
-    herr_t h5err=H5Pset_fapl_core(accPList.getId(),/* memory increment size: 4M */1<<20,/*backing_store*/false);
+    hid_t faplist_id = H5Pcreate(H5P_FILE_ACCESS);
+    herr_t h5err=H5Pset_fapl_core(faplist_id,/* memory increment size: 4M */1<<20,/*backing_store*/false);
     if(h5err<0) throw std::runtime_error("H5P_set_fapl_core failed.");
-    H5::H5File* h5file = new H5::H5File(hdf5name, H5F_ACC_TRUNC,H5::FileCreatPropList::DEFAULT,accPList);
+    hid_t fid = H5Fcreate(hdf5name.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, faplist_id);
 
     /* add data like usual */
     //H5::Group grp=h5file.createGroup("somegroup");
     /* ... */
 
     /* get the image */
-    h5file->flush(H5F_SCOPE_LOCAL); // necessary
-    ssize_t imgSize=H5Fget_file_image(h5file->getId(),NULL,0); // first call to determine size
+    H5Fflush(fid, H5F_SCOPE_LOCAL);
+    ssize_t imgSize=H5Fget_file_image(fid,NULL,0); // first call to determine size
     std::vector<char> buf(imgSize);
-    H5Fget_file_image(h5file->getId(),buf.data(),imgSize); // second call to actually copy the data into our buffer
+    H5Fget_file_image(fid,buf.data(),imgSize); // second call to actually copy the data into our buffer
 
     file_id = H5LTopen_file_image(buf.data(),imgSize,H5LT_FILE_IMAGE_OPEN_RW);
 
-    h5file->close();
+    H5Fclose(fid);
 
   }
 
@@ -348,6 +412,49 @@ private:
       std::cout << "size" << std::endl;
       std::cout << hdf5_size << std::endl;
       file_id = H5LTopen_file_image( hdf5, hdf5_size, H5LT_FILE_IMAGE_OPEN_RW);
+
+    } else {
+      file_id = H5LTopen_file_image( v_buf.data(), v_buf.size(), H5LT_FILE_IMAGE_OPEN_RW);
+    }
+
+  }
+
+  void read_file_image2( std::vector<unsigned char> v_buf ){
+    std::cout << __func__ << std::endl;
+
+    if( compressed ){
+      //copy host to gpu
+      uint8_t* comp_buffer;
+      CUDA_CHECK(cudaMalloc(&comp_buffer, v_buf.size()));
+      CUDA_CHECK(cudaMemcpy(comp_buffer, v_buf.data(), v_buf.size(), cudaMemcpyDefault));      
+
+      cudaStream_t stream;
+      CUDA_CHECK(cudaStreamCreate(&stream));
+
+      const int chunk_size = 1 << 16;
+      nvcompType_t data_type = NVCOMP_TYPE_CHAR;
+
+      nvcomp::LZ4Manager nvcomp_manager{chunk_size, data_type, stream};
+
+      nvcomp::DecompressionConfig decomp_config = nvcomp_manager.configure_decompression(comp_buffer);
+      uint8_t* res_decomp_buffer;
+      CUDA_CHECK(cudaMalloc(&res_decomp_buffer, decomp_config.decomp_data_size));
+
+      std::cout << "nvcomp decomp: size " << decomp_config.decomp_data_size << std::endl;
+
+      nvcomp_manager.decompress(res_decomp_buffer, comp_buffer, decomp_config);
+
+      uint8_t* hdf5 = new uint8_t[decomp_config.decomp_data_size];
+      CUDA_CHECK(cudaMemcpy(hdf5, res_decomp_buffer, decomp_config.decomp_data_size, cudaMemcpyDefault));      
+
+      file_id = H5LTopen_file_image( hdf5, decomp_config.decomp_data_size, H5LT_FILE_IMAGE_OPEN_RW);
+
+      CUDA_CHECK(cudaStreamSynchronize(stream));
+
+      CUDA_CHECK(cudaFree(comp_buffer));
+      CUDA_CHECK(cudaFree(res_decomp_buffer));
+
+      CUDA_CHECK(cudaStreamDestroy(stream));
 
     } else {
       file_id = H5LTopen_file_image( v_buf.data(), v_buf.size(), H5LT_FILE_IMAGE_OPEN_RW);
