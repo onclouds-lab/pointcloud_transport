@@ -71,7 +71,9 @@ public:
 
   ~hdf5frame(){
     std::cout << __func__ << " delete" << std::endl;
+    std::cout << file_id << std::endl;
     H5Fclose(file_id);
+
 
   }
 
@@ -229,6 +231,8 @@ public:
       m = Eigen::Map<Eigen::MatrixXf>(data_buf, dims[0], dims[1]);
     }
 
+    H5Dclose(ds_id);
+
     return(m);
 
   }
@@ -256,6 +260,8 @@ public:
     herr_t ret = H5Dread(ds_id, H5T_NATIVE_UCHAR, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_buf);
 
     cv::Mat mat(dims[0], dims[1]*dims[2], CV_8UC1, data_buf);
+    H5Dclose(ds_id);
+
     return(mat.reshape(dims[2]));
 
   }
@@ -293,13 +299,22 @@ public:
     hid_t ds_id = H5Dcreate(group_id, dname.c_str(), dt_id, space_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     herr_t status = H5Dwrite(ds_id, H5T_NATIVE_UCHAR, H5S_ALL, H5S_ALL, H5P_DEFAULT, mat.data);
 
+    H5Fflush(file_id, H5F_SCOPE_LOCAL);
+
+    H5Tclose(dt_id); //not nessesary
+    H5Sclose(space_id); //not nessesary
+
+    H5Dclose(ds_id);
+    H5Gclose(group_id);
+    H5Pclose(lcpl); //not nessesary
+
   }
 #endif
 
   void input( std::string name, Eigen::VectorXf mat )
   {
     std::vector<std::string> name_vec = split(name,'/');
-    //Create a group named in the file. */
+    //Create a group named in the file.
     std::string group_path;
     hid_t lcpl = H5Pcreate(H5P_LINK_CREATE);
     hid_t group_id = H5Gopen(file_id, "/", H5P_DEFAULT );
@@ -322,12 +337,22 @@ public:
 
     hid_t ds_id = H5Dcreate(group_id, dname.c_str(), dt_id, space_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     herr_t status = H5Dwrite(ds_id, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, mat.data());
+  
+    H5Fflush(file_id, H5F_SCOPE_LOCAL);
+
+    H5Tclose(dt_id); //not nessesary
+    H5Sclose(space_id); //not nessesary
+
+    H5Dclose(ds_id);
+    H5Gclose(group_id);
+    H5Pclose(lcpl); //not nessesary
+
   }
 
   void input( std::string name, Eigen::MatrixXf mat )
   {
     std::vector<std::string> name_vec = split(name,'/');
-    //Create a group named in the file. */
+    //Create a group named in the file.
     std::string group_path;
     hid_t lcpl = H5Pcreate(H5P_LINK_CREATE);
     hid_t group_id = H5Gopen(file_id, "/", H5P_DEFAULT );
@@ -350,7 +375,15 @@ public:
 
     hid_t ds_id = H5Dcreate(group_id, dname.c_str(), dt_id, space_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     herr_t status = H5Dwrite(ds_id, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, mat.data());
-    
+
+    H5Fflush(file_id, H5F_SCOPE_LOCAL);
+
+    H5Tclose(dt_id); //not nessesary
+    H5Sclose(space_id); //not nessesary
+
+    H5Dclose(ds_id);
+    H5Gclose(group_id);
+    H5Pclose(lcpl); //not nessesary
   }
 
   void scan( void ){
@@ -359,8 +392,9 @@ public:
     int len = H5Iget_name(root_id, group_name, 256);
     printf("Group Name: %s\n",group_name);
     scan_group(root_id);
-  }
 
+    H5Gclose(root_id);
+  }
 
 private:
 
@@ -374,27 +408,39 @@ private:
     compressed_level = comp_lv;
   }
 
-  void createNew( std::string hdf5name)
+  void createNew( std::string hdf5name )
   {
+    /* create the HDF5 file image first */
+    hid_t fcplist_id = H5Pcreate(H5P_FILE_CREATE);
+    hid_t faplist_id = H5Pcreate(H5P_FILE_ACCESS);
+    herr_t h5err=H5Pset_fapl_core(faplist_id,/* memory increment size: 4M */1<<20,/*backing_store*/false);
+    if(h5err<0) throw std::runtime_error("H5P_set_fapl_core failed.");
+    file_id = H5Fcreate(hdf5name.c_str(), H5F_ACC_TRUNC, fcplist_id, faplist_id);
+
+    H5Fflush(file_id, H5F_SCOPE_LOCAL);
+
+    /*
+    ssize_t imgSize = H5Fget_file_image(fid,NULL,0);
+    std::vector<unsigned char> buf(imgSize);
+    H5Fget_file_image(fid,buf.data(),imgSize);
+    H5Fclose(fid);
+
+    open_file_image("hdf5frame_new", buf.data(), imgSize);
+    */
+
+  }
+
+  void open_file_image( std::string hdf5name, unsigned char* data, int size ){
     /* create the HDF5 file image first */
     hid_t faplist_id = H5Pcreate(H5P_FILE_ACCESS);
     herr_t h5err=H5Pset_fapl_core(faplist_id,/* memory increment size: 4M */1<<20,/*backing_store*/false);
     if(h5err<0) throw std::runtime_error("H5P_set_fapl_core failed.");
-    hid_t fid = H5Fcreate(hdf5name.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, faplist_id);
+    H5Pset_file_image(faplist_id, data, size);
+    file_id = H5Fopen(hdf5name.c_str(), H5F_ACC_RDWR, faplist_id);
 
-    /* add data like usual */
-    //H5::Group grp=h5file.createGroup("somegroup");
-    /* ... */
+    H5Fflush(file_id, H5F_SCOPE_LOCAL);
 
-    /* get the image */
-    H5Fflush(fid, H5F_SCOPE_LOCAL);
-    ssize_t imgSize=H5Fget_file_image(fid,NULL,0); // first call to determine size
-    std::vector<char> buf(imgSize);
-    H5Fget_file_image(fid,buf.data(),imgSize); // second call to actually copy the data into our buffer
-
-    file_id = H5LTopen_file_image(buf.data(),imgSize,H5LT_FILE_IMAGE_OPEN_RW);
-
-    H5Fclose(fid);
+    H5Pclose(faplist_id);
 
   }
 
@@ -411,10 +457,10 @@ private:
       unsigned long long const hdf5_size = ZSTD_decompress(hdf5, buf_size, v_buf.data(), v_buf.size());
       std::cout << "size" << std::endl;
       std::cout << hdf5_size << std::endl;
-      file_id = H5LTopen_file_image( hdf5, hdf5_size, H5LT_FILE_IMAGE_OPEN_RW);
+      open_file_image( "hdf5frame_new", hdf5, hdf5_size );
 
     } else {
-      file_id = H5LTopen_file_image( v_buf.data(), v_buf.size(), H5LT_FILE_IMAGE_OPEN_RW);
+      open_file_image( "hdf5frame_new", v_buf.data(), v_buf.size() );
     }
 
   }
@@ -447,7 +493,7 @@ private:
       uint8_t* hdf5 = new uint8_t[decomp_config.decomp_data_size];
       CUDA_CHECK(cudaMemcpy(hdf5, res_decomp_buffer, decomp_config.decomp_data_size, cudaMemcpyDefault));      
 
-      file_id = H5LTopen_file_image( hdf5, decomp_config.decomp_data_size, H5LT_FILE_IMAGE_OPEN_RW);
+      open_file_image( "hdf5frame_new", hdf5, decomp_config.decomp_data_size );
 
       CUDA_CHECK(cudaStreamSynchronize(stream));
 
@@ -457,7 +503,7 @@ private:
       CUDA_CHECK(cudaStreamDestroy(stream));
 
     } else {
-      file_id = H5LTopen_file_image( v_buf.data(), v_buf.size(), H5LT_FILE_IMAGE_OPEN_RW);
+      open_file_image( "hdf5frame_new", v_buf.data(), v_buf.size() );
     }
 
   }

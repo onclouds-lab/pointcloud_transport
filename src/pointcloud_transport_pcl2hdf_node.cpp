@@ -12,11 +12,12 @@ void pointcloud_cb( const sensor_msgs::PointCloud2ConstPtr& pointsMsg){
     std::cout << __func__ << std::endl;
 
     hdf5frame* hdf5data = new hdf5frame(compressed, compressed_level);
-
     //type
     uint8_t pcl_type;
     for( int i=0; i<pointsMsg->fields.size(); i++ ){
         if(pointsMsg->fields[i].name.compare("i")==0){
+            pcl_type = pointcloud_transport::PclHDF5::TYPE_XYZI;
+        } else if( pointsMsg->fields[i].name.compare("intensity")==0 ){
             pcl_type = pointcloud_transport::PclHDF5::TYPE_XYZI;
         }
         std::cout << pointsMsg->fields[i].name << std::endl;
@@ -31,6 +32,7 @@ void pointcloud_cb( const sensor_msgs::PointCloud2ConstPtr& pointsMsg){
 
         //convert pcl to eigen mat
         convertToEigen( pc, m );
+        
     } else {
         std::cout << __func__ << std::endl;
         std::cout << "undetected pointcloud type !" << std::endl;
