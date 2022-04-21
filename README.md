@@ -1,9 +1,9 @@
-# pointcloud_transport
-ROS package for converting pointcloud2 to binary
-This package convert pointcloud2 to binary and binary to pointcloud2.
+# Point Cloud Compression Message
+ROS package for pointcloud2 compression 
  
 # Feature
-reduce amout of size and compressed by zstd
+Translate pointcloud2 to hdf5  
+Compression by zstd or nvcomp and Stream  
 
 # Dependency
 ROS1  
@@ -21,10 +21,17 @@ zstd
 # Install and build
 clone to your ros work space and catkin_make
 
-# Topics
-pointcloud: pointcloud2 message  
-pointcloud_hdf5: hdf5 message converted from pointcloud2  
+# Package
+# pointcloud_transport_pcl2hdf5
+## Topics
+pointcloud(in): pointcloud2 message  
+pointcloud_hdf5(out): hdf5 and compression message  
 
-# Parameter
+## Parameter
 compressed: true or false ( default: false )  
-compressed_level: int ( default: 3 ) compressed level for zstd  
+compressed_level: int ( default: 3 ) compressed level only for zstd  
+
+# pointcloud_transport_hdf2pcl
+## Topics
+pointcloud(out): pointcloud2 message  
+pointcloud_hdf5(in): hdf5 and compression message  
