@@ -1,9 +1,10 @@
 # Point Cloud Compression Message
-ROS package for pointcloud2 compression 
+ROS package for pointcloud2 compression.  
+compression and decompression for ROS package.  
  
 # Feature
 Translate pointcloud2 to hdf5  
-Compression by zstd or nvcomp and Stream  
+Compression and decompression by zstd or nvcomp and Stream  
 
 # Dependency
 ROS1  
@@ -22,7 +23,7 @@ zstd
 clone to your ros work space and catkin_make
 
 # Package
-# pointcloud_transport_pcl2hdf5
+# pointcloud_transport_pcl2hdf
 ## Topics
 pointcloud(in): pointcloud2 message  
 pointcloud_hdf5(out): hdf5 and compression message  
@@ -35,3 +36,6 @@ compressed_level: int ( default: 3 ) compressed level only for zstd
 ## Topics
 pointcloud(out): pointcloud2 message  
 pointcloud_hdf5(in): hdf5 and compression message  
+
+# Launch file
+Please check launch file in launch for start these package.
