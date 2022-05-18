@@ -155,7 +155,7 @@ public:
     
   }
 
-  void execute_nvdecomp(char* bin_data, const size_t bin_bytes){
+  void execute_nvdecomp(char* bin_data, const size_t bin_bytes, std::vector<unsigned char>& dst ){
     std::cout << __func__ << std::endl;
 
     size_t chunk_size;
@@ -296,14 +296,17 @@ public:
       host_output_ptrs[ix_chunk] = host_output_data + host_uncompressed_bytes[ix_chunk-1];
     }
 
+    std::cout << "copy device to host" << std::endl;
     for(size_t ix_chunk = 0; ix_chunk < batch_size; ++ix_chunk) {
       std::cout << host_output_ptrs[ix_chunk] << std::endl;
       std::cout << (size_t)(host_uncompressed_bytes[ix_chunk]) << std::endl;
       //cudaMemcpyAsync(host_output_ptrs[ix_chunk], device_compressed_ptrs, (size_t)(host_compressed_bytes[ix_chunk]), cudaMemcpyDeviceToHost, stream);
       cudaMemcpyAsync(host_output_ptrs[ix_chunk], host_uncompressed_ptrs[ix_chunk], (size_t)(host_uncompressed_bytes[ix_chunk]), cudaMemcpyDeviceToHost, stream);
     }
-
     cudaStreamSynchronize(stream);
+
+    dst.resize(out_bytes);
+    std::copy(host_output_data, host_output_data+out_bytes, dst.begin() );
 
     CUDA_CHECK(cudaStreamDestroy(stream));
     std::cout << "decomp finish" << std::endl;
@@ -311,7 +314,7 @@ public:
   }
 
 
-  void execute_nvcomp(char* input_data, const size_t in_bytes){
+  void execute_nvcomp(char* input_data, const size_t in_bytes, std::vector<unsigned char>& dst){
     std::cout << __func__ << std::endl;
     std::cout << in_bytes << std::endl;
 
@@ -451,7 +454,10 @@ public:
     memcpy(bin_data,header_data,header_bytes);
     memcpy(bin_data+header_bytes,host_output_data,out_bytes);
 
-    execute_nvdecomp(bin_data, bin_bytes);
+    dst.resize(bin_bytes);
+    std::copy(bin_data, bin_data+bin_bytes, dst.begin() );
+
+    //execute_nvdecomp(bin_data, bin_bytes);
     
     //std::cout << device_compressed_bytes[0] << std::endl;
     //std::cout << device_uncompressed_bytes[0] << std::endl;
@@ -468,42 +474,8 @@ public:
     H5Fget_file_image(file_id,hdf5_img,imgSize); // second call to actually copy the data into our buffer
 
     if( compressed ){
-      execute_nvcomp(hdf5_img, imgSize);
+      execute_nvcomp(hdf5_img, imgSize, dst);
       std::cout << "finish!!" << std::endl;
-
-#if 0
-      //copy host to gpu
-      uint8_t* device_input_ptrs;
-      CUDA_CHECK(cudaMalloc(&device_input_ptrs, imgSize));
-      CUDA_CHECK(cudaMemcpy(device_input_ptrs, hdf5_img, imgSize, cudaMemcpyDefault));      
-
-      cudaStream_t stream;
-      CUDA_CHECK(cudaStreamCreate(&stream));
-
-      const int chunk_size = 1 << 16;
-      nvcompType_t data_type = NVCOMP_TYPE_CHAR;
-
-      nvcomp::LZ4Manager nvcomp_manager{chunk_size, data_type, stream};
-      nvcomp::CompressionConfig comp_config = nvcomp_manager.configure_compression(imgSize);
-
-      uint8_t* comp_buffer;
-      CUDA_CHECK(cudaMalloc(&comp_buffer, comp_config.max_compressed_buffer_size));
-      nvcomp_manager.compress(device_input_ptrs, comp_buffer, comp_config);
-      ssize_t comp_data_len = nvcomp_manager.get_compressed_output_size(comp_buffer);
-
-      uint8_t* comp_host = new uint8_t[comp_data_len];
-      CUDA_CHECK(cudaMemcpy(comp_host, comp_buffer, comp_data_len, cudaMemcpyDefault));      
-
-      dst.resize(comp_data_len);
-      std::copy(comp_host, comp_host+comp_data_len, dst.begin() );
-
-      CUDA_CHECK(cudaStreamSynchronize(stream));
-
-      CUDA_CHECK(cudaFree(device_input_ptrs));
-      CUDA_CHECK(cudaFree(comp_buffer));
-
-      CUDA_CHECK(cudaStreamDestroy(stream));
-#endif
 
     } else {
       dst.resize(imgSize);
@@ -811,38 +783,10 @@ private:
     std::cout << __func__ << std::endl;
 
     if( compressed ){
-      //copy host to gpu
-      uint8_t* comp_buffer;
-      CUDA_CHECK(cudaMalloc(&comp_buffer, v_buf.size()));
-      CUDA_CHECK(cudaMemcpy(comp_buffer, v_buf.data(), v_buf.size(), cudaMemcpyDefault));      
-
-      cudaStream_t stream;
-      CUDA_CHECK(cudaStreamCreate(&stream));
-
-      const int chunk_size = 1 << 16;
-      nvcompType_t data_type = NVCOMP_TYPE_CHAR;
-
-      nvcomp::LZ4Manager nvcomp_manager{chunk_size, data_type, stream};
-
-      nvcomp::DecompressionConfig decomp_config = nvcomp_manager.configure_decompression(comp_buffer);
-      uint8_t* res_decomp_buffer;
-      CUDA_CHECK(cudaMalloc(&res_decomp_buffer, decomp_config.decomp_data_size));
-
-      std::cout << "nvcomp decomp: size " << decomp_config.decomp_data_size << std::endl;
-
-      nvcomp_manager.decompress(res_decomp_buffer, comp_buffer, decomp_config);
-
-      uint8_t* hdf5 = new uint8_t[decomp_config.decomp_data_size];
-      CUDA_CHECK(cudaMemcpy(hdf5, res_decomp_buffer, decomp_config.decomp_data_size, cudaMemcpyDefault));      
-
-      open_file_image( "hdf5frame_new", hdf5, decomp_config.decomp_data_size );
-
-      CUDA_CHECK(cudaStreamSynchronize(stream));
-
-      CUDA_CHECK(cudaFree(comp_buffer));
-      CUDA_CHECK(cudaFree(res_decomp_buffer));
-
-      CUDA_CHECK(cudaStreamDestroy(stream));
+      std::vector<unsigned char> hdf5_buf;
+      execute_nvdecomp((char*)v_buf.data(), v_buf.size(), hdf5_buf);
+      open_file_image( "hdf5frame_new", hdf5_buf.data(), hdf5_buf.size() );
+      scan();
 
     } else {
       open_file_image( "hdf5frame_new", v_buf.data(), v_buf.size() );

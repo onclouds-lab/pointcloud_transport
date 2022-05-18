@@ -71,5 +71,14 @@ int main( int argc, char** argv ){
     ros::Subscriber pcl_sub = nh.subscribe("pointcloud", 10, &pointcloud_cb);
     hdf5_pub = nh.advertise<pointcloud_transport::PclHDF5>("pointcloud_hdf", 10);
 
+    hdf5frame* hdf5data = new hdf5frame(1, compressed_level);
+    std::vector<unsigned char> buf;
+    hdf5data->get_file_image2(buf);
+    std::cout << "size" << std::endl;
+    std::cout << buf.size() << std::endl;
+    delete hdf5data;
+
+    hdf5frame* hdf5data2 = new hdf5frame(buf, 1, 1);
     ros::spin();
+
 }
