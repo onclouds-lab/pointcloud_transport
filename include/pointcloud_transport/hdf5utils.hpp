@@ -163,18 +163,19 @@ public:
 
     size_t bytes_size = decode_nvheader(bin_data, chunk_size, batch_size);
     
-    std::cout << chunk_size << std::endl;
-    std::cout << batch_size << std::endl;
+    //std::cout << chunk_size << std::endl;
+    //std::cout << batch_size << std::endl;
 
     size_t* host_compressed_bytes;
     cudaMallocHost((void**)&host_compressed_bytes, bytes_size);
 
     size_t header_size = decode_nvheader(bin_data, chunk_size, batch_size, host_compressed_bytes);
 
-    std::cout << "host_compressed_bytes" << std::endl;
-    for( int i=0; i<batch_size;  i++ ) std::cout << host_compressed_bytes[i] << std::endl;
+    //std::cout << "host_compressed_bytes" << std::endl;
+    //for( int i=0; i<batch_size;  i++ ) std::cout << host_compressed_bytes[i] << std::endl;
  
     size_t in_bytes = bin_bytes - header_size;
+    std::cout << "in_bytes" << std::endl;
     std::cout << in_bytes << std::endl;
 
     cudaStream_t stream;
@@ -189,7 +190,7 @@ public:
     cudaMallocHost((void**)&host_compressed_ptrs, sizeof(size_t)*batch_size);
     host_compressed_ptrs[0] = device_input_data;
     for (size_t ix_chunk = 1; ix_chunk < batch_size; ++ix_chunk) {
-      host_compressed_ptrs[ix_chunk] = device_input_data + host_compressed_bytes[ix_chunk-1];
+      host_compressed_ptrs[ix_chunk] = host_compressed_ptrs[ix_chunk-1] + host_compressed_bytes[ix_chunk-1];
     }
 
     size_t* device_compressed_bytes;
@@ -276,14 +277,14 @@ public:
     //allocate uncompressed
     cudaStreamSynchronize(stream);
 
-    std::cout << "host_uncompressed_bytes" << std::endl;
+    //std::cout << "host_uncompressed_bytes" << std::endl;
     size_t out_bytes = 0;
     for(size_t ix_chunk = 0; ix_chunk < batch_size; ++ix_chunk) {
-      std::cout << host_compressed_bytes[ix_chunk] << std::endl;
-      std::cout << (size_t)(host_uncompressed_bytes[ix_chunk]) << std::endl;
+      //std::cout << host_compressed_bytes[ix_chunk] << std::endl;
+      //std::cout << (size_t)(host_uncompressed_bytes[ix_chunk]) << std::endl;
       out_bytes += (size_t)(host_uncompressed_bytes[ix_chunk]);
     }
-    std::cout << out_bytes << std::endl;
+    //std::cout << out_bytes << std::endl;
 
     char* host_output_data;
     cudaMallocHost((void**)&host_output_data, out_bytes);
@@ -293,13 +294,13 @@ public:
     cudaMallocHost((void**)&host_output_ptrs, sizeof(size_t)*batch_size);
     host_output_ptrs[0] = host_output_data;
     for (size_t ix_chunk = 1; ix_chunk < batch_size; ++ix_chunk) {
-      host_output_ptrs[ix_chunk] = host_output_data + host_uncompressed_bytes[ix_chunk-1];
+      host_output_ptrs[ix_chunk] = host_output_ptrs[ix_chunk-1] + host_uncompressed_bytes[ix_chunk-1];
     }
 
-    std::cout << "copy device to host" << std::endl;
+    //std::cout << "copy device to host" << std::endl;
     for(size_t ix_chunk = 0; ix_chunk < batch_size; ++ix_chunk) {
-      std::cout << host_output_ptrs[ix_chunk] << std::endl;
-      std::cout << (size_t)(host_uncompressed_bytes[ix_chunk]) << std::endl;
+      //std::cout << host_output_ptrs[ix_chunk] << std::endl;
+      //std::cout << (size_t)(host_uncompressed_bytes[ix_chunk]) << std::endl;
       //cudaMemcpyAsync(host_output_ptrs[ix_chunk], device_compressed_ptrs, (size_t)(host_compressed_bytes[ix_chunk]), cudaMemcpyDeviceToHost, stream);
       cudaMemcpyAsync(host_output_ptrs[ix_chunk], host_uncompressed_ptrs[ix_chunk], (size_t)(host_uncompressed_bytes[ix_chunk]), cudaMemcpyDeviceToHost, stream);
     }
@@ -325,8 +326,8 @@ public:
 
     // compute chunk sizes
     size_t* host_uncompressed_bytes;
-    //const size_t chunk_size = 65536;
-    const size_t chunk_size = 500;
+    const size_t chunk_size = 65536;
+    //const size_t chunk_size = 200;
     const size_t batch_size = (in_bytes + chunk_size - 1) / chunk_size;
 
     char* device_input_data;
@@ -350,7 +351,7 @@ public:
       host_uncompressed_ptrs[ix_chunk] = device_input_data + chunk_size*ix_chunk;
     }
 
-    for( int i=0; i<batch_size; i++) std::cout << host_uncompressed_bytes[i] << std::endl;
+   //for( int i=0; i<batch_size; i++) std::cout << host_uncompressed_bytes[i] << std::endl;
 
     size_t* device_uncompressed_bytes;
     void ** device_uncompressed_ptrs;
@@ -427,13 +428,15 @@ public:
     void ** host_output_ptrs;
     cudaMallocHost((void**)&host_output_ptrs, sizeof(size_t)*batch_size);
     host_output_ptrs[0] = host_output_data;
+    std::cout << host_output_ptrs[0] << std::endl;
     for (size_t ix_chunk = 1; ix_chunk < batch_size; ++ix_chunk) {
-      host_output_ptrs[ix_chunk] = host_output_data + host_compressed_bytes[ix_chunk-1];
-    }
+      host_output_ptrs[ix_chunk] = host_output_ptrs[ix_chunk-1] + host_compressed_bytes[ix_chunk-1];
+      std::cout << host_output_ptrs[ix_chunk] << std::endl;
+    } 
 
     for(size_t ix_chunk = 0; ix_chunk < batch_size; ++ix_chunk) {
-      std::cout << host_output_ptrs[ix_chunk] << std::endl;
-      std::cout << (size_t)(host_compressed_bytes[ix_chunk]) << std::endl;
+      //std::cout << host_output_ptrs[ix_chunk] << std::endl;
+      //std::cout << (size_t)(host_compressed_bytes[ix_chunk]) << std::endl;
       //cudaMemcpyAsync(host_output_ptrs[ix_chunk], device_compressed_ptrs, (size_t)(host_compressed_bytes[ix_chunk]), cudaMemcpyDeviceToHost, stream);
       cudaMemcpyAsync(host_output_ptrs[ix_chunk], host_compressed_ptrs[ix_chunk], (size_t)(host_compressed_bytes[ix_chunk]), cudaMemcpyDeviceToHost, stream);
     }
@@ -448,7 +451,7 @@ public:
     encode_nvheader(chunk_size, batch_size, host_compressed_bytes, header_data);
 
     size_t bin_bytes = header_bytes + out_bytes;
-    std::cout << bin_bytes << std::endl;    
+    //std::cout << bin_bytes << std::endl;    
     char* bin_data = new char[bin_bytes];
 
     memcpy(bin_data,header_data,header_bytes);
@@ -786,7 +789,6 @@ private:
       std::vector<unsigned char> hdf5_buf;
       execute_nvdecomp((char*)v_buf.data(), v_buf.size(), hdf5_buf);
       open_file_image( "hdf5frame_new", hdf5_buf.data(), hdf5_buf.size() );
-      scan();
 
     } else {
       open_file_image( "hdf5frame_new", v_buf.data(), v_buf.size() );
