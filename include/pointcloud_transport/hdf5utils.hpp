@@ -112,6 +112,8 @@ public:
       dst.resize(cSize);
       std::copy(cBuff, cBuff+cSize, dst.begin() );
 
+      delete[] hdf5_img;
+
     } else {
       dst.resize(imgSize);
       std::copy(hdf5_img, hdf5_img+imgSize, dst.begin() );
@@ -156,7 +158,6 @@ public:
   }
 
   void execute_nvdecomp(char* bin_data, const size_t bin_bytes, std::vector<unsigned char>& dst ){
-    std::cout << __func__ << std::endl;
 
     size_t chunk_size;
     size_t batch_size;
@@ -175,8 +176,8 @@ public:
     //for( int i=0; i<batch_size;  i++ ) std::cout << host_compressed_bytes[i] << std::endl;
  
     size_t in_bytes = bin_bytes - header_size;
-    std::cout << "in_bytes" << std::endl;
-    std::cout << in_bytes << std::endl;
+    //std::cout << "in_bytes" << std::endl;
+    //std::cout << in_bytes << std::endl;
 
     cudaStream_t stream;
     cudaStreamCreate(&stream);
@@ -312,12 +313,39 @@ public:
     CUDA_CHECK(cudaStreamDestroy(stream));
     std::cout << "decomp finish" << std::endl;
 
+    //Free
+    cudaFree(device_input_data);
+
+    cudaFreeHost(host_compressed_ptrs);
+    
+    cudaFree(device_compressed_bytes);
+    cudaFree(device_compressed_ptrs);
+  
+    cudaFree(device_uncompressed_bytes);
+
+    for(size_t ix_chunk = 0; ix_chunk < batch_size; ++ix_chunk) {
+      cudaFree(host_uncompressed_ptrs[ix_chunk]);
+    }
+    cudaFreeHost(host_uncompressed_ptrs);
+ 
+    cudaFree(device_uncompressed_ptrs);
+    cudaFree(device_decomp_temp);
+
+    cudaFree(device_statuses);
+
+    cudaFree(device_actual_uncompressed_bytes);
+
+    cudaFreeHost(host_uncompressed_bytes);
+
+    cudaFreeHost(host_output_data);
+    cudaFreeHost(host_output_ptrs);
+
   }
 
 
   void execute_nvcomp(char* input_data, const size_t in_bytes, std::vector<unsigned char>& dst){
-    std::cout << __func__ << std::endl;
-    std::cout << in_bytes << std::endl;
+    //std::cout << __func__ << std::endl;
+    //std::cout << in_bytes << std::endl;
 
     cudaStream_t stream;
     cudaStreamCreate(&stream);
@@ -418,8 +446,8 @@ public:
     for(size_t ix_chunk = 0; ix_chunk < batch_size; ++ix_chunk) {
         out_bytes += (size_t)(host_compressed_bytes[ix_chunk]);
     }
-    std::cout << "out_bytes" << std::endl;
-    std::cout << out_bytes << std::endl;
+    //std::cout << "out_bytes" << std::endl;
+    //std::cout << out_bytes << std::endl;
 
     char* host_output_data;
     cudaMallocHost((void**)&host_output_data, out_bytes);
@@ -428,10 +456,10 @@ public:
     void ** host_output_ptrs;
     cudaMallocHost((void**)&host_output_ptrs, sizeof(size_t)*batch_size);
     host_output_ptrs[0] = host_output_data;
-    std::cout << host_output_ptrs[0] << std::endl;
+    //std::cout << host_output_ptrs[0] << std::endl;
     for (size_t ix_chunk = 1; ix_chunk < batch_size; ++ix_chunk) {
       host_output_ptrs[ix_chunk] = host_output_ptrs[ix_chunk-1] + host_compressed_bytes[ix_chunk-1];
-      std::cout << host_output_ptrs[ix_chunk] << std::endl;
+      //std::cout << host_output_ptrs[ix_chunk] << std::endl;
     } 
 
     for(size_t ix_chunk = 0; ix_chunk < batch_size; ++ix_chunk) {
@@ -442,7 +470,6 @@ public:
     }
 
     cudaStreamSynchronize(stream);
-
     CUDA_CHECK(cudaStreamDestroy(stream));
     
     //create bin data
@@ -460,15 +487,34 @@ public:
     dst.resize(bin_bytes);
     std::copy(bin_data, bin_data+bin_bytes, dst.begin() );
 
-    //execute_nvdecomp(bin_data, bin_bytes);
-    
-    //std::cout << device_compressed_bytes[0] << std::endl;
-    //std::cout << device_uncompressed_bytes[0] << std::endl;
+    cudaFree(device_input_data);
+
+    cudaFreeHost(host_uncompressed_bytes);
+
+    for(size_t ix_chunk = 0; ix_chunk < batch_size; ++ix_chunk) {
+      cudaFree(host_compressed_ptrs[ix_chunk]);
+    }
+    cudaFreeHost(host_uncompressed_ptrs);
+    cudaFree(device_uncompressed_bytes);
+    cudaFree(device_uncompressed_ptrs);
+
+    cudaFree(device_temp_ptr);
+
+    cudaFreeHost(host_compressed_ptrs);
+    cudaFreeHost(host_compressed_bytes);
+
+    cudaFree(device_compressed_ptrs);
+    cudaFree(device_compressed_bytes);
+
+    cudaFreeHost(host_output_data);
+    cudaFreeHost(host_output_ptrs);
+
+    delete[] header_data;
+    delete[] bin_data;
 
   }
 
   void get_file_image2( std::vector<unsigned char>& dst ){
-    std::cout << __func__ <<std::endl;
     //nessesary to flush
     H5Fflush(file_id, H5F_SCOPE_LOCAL);
 
@@ -478,13 +524,14 @@ public:
 
     if( compressed ){
       execute_nvcomp(hdf5_img, imgSize, dst);
-      std::cout << "finish!!" << std::endl;
 
     } else {
       dst.resize(imgSize);
       std::copy(hdf5_img, hdf5_img+imgSize, dst.begin() );
 
     }
+
+    delete[] hdf5_img;
 
   }
 
@@ -514,6 +561,8 @@ public:
       auto hdf5_file = std::fstream(filename, std::ios::out | std::ios::binary);
       hdf5_file.write((char*)cBuff, cSize);
       hdf5_file.close();
+
+      delete[] cBuff;
 
     } else {
       auto hdf5_file = std::fstream(filename, std::ios::out | std::ios::binary);
@@ -549,6 +598,9 @@ public:
     }
 
     H5Dclose(ds_id);
+
+    delete[] dims;
+    delete[] data_buf;
 
     return(m);
 
@@ -776,6 +828,8 @@ private:
       std::cout << hdf5_size << std::endl;
       open_file_image( "hdf5frame_new", hdf5, hdf5_size );
 
+      delete[] hdf5;
+
     } else {
       open_file_image( "hdf5frame_new", v_buf.data(), v_buf.size() );
     }
@@ -908,6 +962,8 @@ private:
     }
     */
     H5Tclose(tid);
+
+    delete[] dims;
 
   }
 
