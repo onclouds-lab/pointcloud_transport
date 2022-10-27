@@ -15,8 +15,15 @@ bool compressed;
 int compressed_level;
 bool float_flag;
 float lsb;
+float voxelGridSize;
+int skipRate;
+unsigned int count = 0;
 void pointcloud_cb( const sensor_msgs::PointCloud2ConstPtr& pointsMsg){
     std::cout << __func__ << std::endl;
+
+    //skip
+    count++;
+    if( count%skipRate != 0 ) return;
 
     hdf5frame* hdf5data = new hdf5frame(compressed, compressed_level);
     //type
@@ -35,10 +42,28 @@ void pointcloud_cb( const sensor_msgs::PointCloud2ConstPtr& pointsMsg){
         std::cout << "point clouds type : XYZI" << std::endl;
         pcl::PointCloud<pcl::PointXYZI>::Ptr pc = static_cast<pcl::PointCloud<pcl::PointXYZI>::Ptr>(new pcl::PointCloud<pcl::PointXYZI>());
         pcl::fromROSMsg(*pointsMsg, *pc);
-        std::cout << "point size : " << pc->size() << std::endl;
 
-        //convert pcl to eigen mat
-        convertToEigen( pc, m );
+        //Voxel Grid Filter
+        if( voxelGridSize > 0.0 ){
+            pcl::PointCloud<pcl::PointXYZI>::Ptr pcFiltered = static_cast<pcl::PointCloud<pcl::PointXYZI>::Ptr>(new pcl::PointCloud<pcl::PointXYZI>());
+            pcl::VoxelGrid<pcl::PointXYZI> sor;
+            sor.setInputCloud( pc );
+            sor.setLeafSize (voxelGridSize, voxelGridSize, voxelGridSize);
+            //sor.setDownsampleAllData(true);
+            sor.filter ( *(pcFiltered) );
+
+            std::cout << "point size : " << pc->size() << std::endl;
+            std::cout << "point(filtered) size : " << pcFiltered->size() << std::endl;
+
+            //convert pcl to eigen mat
+            convertToEigen( pcFiltered, m );
+
+        } else {
+            std::cout << "point size : " << pc->size() << std::endl;
+            //convert pcl to eigen mat
+            convertToEigen( pc, m );
+
+        }
         
     } else {
         std::cout << __func__ << std::endl;
@@ -84,7 +109,11 @@ int main( int argc, char** argv ){
     ROS_INFO("%s: Type Float %d", ros::this_node::getName().c_str(), float_flag);
     nh.param<float>("lsb", lsb, 0.002);
     ROS_INFO("%s: LSB %f", ros::this_node::getName().c_str(), lsb);
-    
+    nh.param<float>("voxel_grid_size", voxelGridSize, 0.0);
+    ROS_INFO("%s: Voxel Grid Size %f", ros::this_node::getName().c_str(), voxelGridSize);
+    nh.param<int>("skip_rate", skipRate, 1);
+    ROS_INFO("%s: Skip Rate %d", ros::this_node::getName().c_str(), skipRate);
+
     nh.param<bool>("compressed", compressed, false);
     ROS_INFO("%s: compressed %d", ros::this_node::getName().c_str(), compressed);
     nh.param<int>("compressed_level", compressed_level, 3);
