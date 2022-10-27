@@ -1,7 +1,8 @@
 Header header
 uint8 type
-int32 compressed
-int32 compressed_level
+uint8 compressed
+uint8 compressed_level
+float32 lsb
 uint8[] hdf5data
 
 uint8 TYPE_XYZI=0

@@ -573,14 +573,13 @@ public:
 
   }
 
-  Eigen::MatrixXf getMat( std::string name, int row_major = false ){
+  template <typename T> Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> getMat( std::string name, hid_t type = H5T_NATIVE_FLOAT, int row_major = false ){
 
     if( H5Lexists(file_id, name.c_str(), H5P_DEFAULT) <= 0 ){
       std::cout << __func__ << " : not found " << name << std::endl;
       exit(0);
     }
 
-    //hid_t grp_id = H5Gopen(file_id, "/feature", H5P_DEFAULT);
     hid_t ds_id = H5Dopen(file_id, name.c_str(), H5P_DEFAULT);
 
     hid_t space = H5Dget_space(ds_id);
@@ -588,13 +587,13 @@ public:
     hsize_t* dims = new hsize_t[rank];
     int ndims = H5Sget_simple_extent_dims(space, dims, NULL);
 
-    float* data_buf = new float[dims[0]*dims[1]];
-    herr_t ret = H5Dread(ds_id, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_buf);
-    Eigen::MatrixXf m;
+    T* data_buf = new T[dims[0]*dims[1]];
+    herr_t ret = H5Dread(ds_id, type, H5S_ALL, H5S_ALL, H5P_DEFAULT, data_buf);
+    Eigen::Matrix<T,-1,-1> m;
     if( row_major ){
-      m = Eigen::Map<Eigen::Matrix<float,-1,-1,Eigen::RowMajor>>(data_buf, dims[0], dims[1]);
+      m = Eigen::Map<Eigen::Matrix<T,-1,-1,Eigen::RowMajor>>(data_buf, dims[0], dims[1]);
     } else {
-      m = Eigen::Map<Eigen::MatrixXf>(data_buf, dims[0], dims[1]);
+      m = Eigen::Map<Eigen::Matrix<T,-1,-1>>(data_buf, dims[0], dims[1]);
     }
 
     H5Dclose(ds_id);
@@ -679,9 +678,36 @@ public:
 
   }
 #endif
-
-  void input( std::string name, Eigen::VectorXf mat )
+/*
+H5T_NATIVE_CHAR char
+H5T_NATIVE_SCHAR signed char
+H5T_NATIVE_UCHAR unsigned char
+H5T_NATIVE_SHORT short
+H5T_NATIVE_USHORT unsigned short 
+H5T_NATIVE_INT int
+H5T_NATIVE_UINT unsigned
+H5T_NATIVE_LONG long 
+H5T_NATIVE_ULONG unsigned long
+H5T_NATIVE_LLONG long long
+H5T_NATIVE_ULLONG unsigned long long
+H5T_NATIVE_FLOAT float
+H5T_NATIVE_DOUBLE double
+H5T_NATIVE_LDOUBLE long double
+H5T_NATIVE_HSIZE hsize_t
+H5T_NATIVE_HSSIZE hssize_t
+H5T_NATIVE_HERR herr_t
+H5T_NATIVE_HBOOL hbool_t
+H5T_NATIVE_B8 8-bit unsigned integer or 8-bit buffer in memory
+H5T_NATIVE_B16 16-bit unsigned integer or 16-bit buffer in memory
+H5T_NATIVE_B32 32-bit unsigned integer or 32-bit buffer in memory
+H5T_NATIVE_B64 64-bit unsigned integer or 64-bit buffer in memory
+*/
+  template <typename T> void input( std::string name, Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> mat, hid_t type = H5T_NATIVE_FLOAT )
   {
+    std::cout << __func__ << std::endl;
+    std::cout << typeid(T).name() << std::endl;
+    std::cout << typeid(unsigned short).name() << std::endl;
+
     std::vector<std::string> name_vec = split(name,'/');
     //Create a group named in the file.
     std::string group_path;
@@ -701,11 +727,13 @@ public:
 
     hsize_t dims[2] = { mat.rows(), mat.cols()};
     hid_t space_id = H5Screate_simple( 2, dims, NULL );
-    hid_t dt_id = H5Tcopy(H5T_NATIVE_FLOAT);
+    //hid_t dt_id = H5Tcopy(H5T_NATIVE_FLOAT);
+    hid_t dt_id = H5Tcopy(type);
     //status = H5Tset_order(datatype, H5T_ORDER_LE);
 
     hid_t ds_id = H5Dcreate(group_id, dname.c_str(), dt_id, space_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    herr_t status = H5Dwrite(ds_id, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, mat.data());
+    //herr_t status = H5Dwrite(ds_id, H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL, H5P_DEFAULT, mat.data());
+    herr_t status = H5Dwrite(ds_id, type, H5S_ALL, H5S_ALL, H5P_DEFAULT, mat.data());
   
     H5Fflush(file_id, H5F_SCOPE_LOCAL);
 
@@ -718,6 +746,7 @@ public:
 
   }
 
+  /*
   void input( std::string name, Eigen::MatrixXf mat )
   {
     std::vector<std::string> name_vec = split(name,'/');
@@ -754,6 +783,7 @@ public:
     H5Gclose(group_id);
     H5Pclose(lcpl); //not nessesary
   }
+  */
 
   void scan( void ){
     hid_t root_id = H5Gopen(file_id, "/", H5P_DEFAULT );
@@ -868,8 +898,8 @@ private:
 	  for (int i = 0; i < num_obj; i++) {
       printf("  Member: %d ",i);
       int len = H5Gget_objname_by_idx(group_id, (hsize_t)i, memb_name, (size_t)256 );
-		  printf("   %d ",len);
-		  printf("  Member: %s ",memb_name);
+		  //printf("   %d ",len);
+		  printf(" %s ",memb_name);
       printf("\n");
 		  int otype = H5Gget_objtype_by_idx(group_id, (size_t)i );
       switch(otype) {

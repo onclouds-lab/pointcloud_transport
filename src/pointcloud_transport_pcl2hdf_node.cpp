@@ -5,9 +5,16 @@ void convertToEigen( pcl::PointCloud<pcl::PointXYZI>::Ptr pc, Eigen::MatrixXf& m
     mat = m.block(0,0,5,m.cols());
 }
 
+Eigen::Matrix<unsigned short, -1, -1> convertToUSHORT( Eigen::MatrixXf mat ){
+    Eigen::MatrixXf m = mat.array() + 0.5;
+    return(m.cast<unsigned short>());
+}
+
 ros::Publisher hdf5_pub;
 bool compressed;
 int compressed_level;
+bool float_flag;
+float lsb;
 void pointcloud_cb( const sensor_msgs::PointCloud2ConstPtr& pointsMsg){
     std::cout << __func__ << std::endl;
 
@@ -43,8 +50,15 @@ void pointcloud_cb( const sensor_msgs::PointCloud2ConstPtr& pointsMsg){
     std::cout << m.block(0,0,5,5) << std::endl;
 
     //convert eigen mat to hdf5
-    hdf5data->input("/pointcloud", m);
-    hdf5data->scan();
+    if( float_flag == true ){
+        hdf5data->input("/pointcloud", m);
+        hdf5data->scan();
+    } else {
+        Eigen::Matrix<unsigned short, -1, -1> xyz_ushort = convertToUSHORT( m.block(0,0,3,m.cols())/lsb );
+        hdf5data->input<unsigned short>("/pointcloud_xyz", xyz_ushort, H5T_NATIVE_USHORT);
+        hdf5data->input<float>("/pointcloud_intensity", m.block(4,0,1,m.cols()));
+        hdf5data->scan();
+    }
 
     //create ros message
     pointcloud_transport::PclHDF5 HDF5_msg;
@@ -52,6 +66,7 @@ void pointcloud_cb( const sensor_msgs::PointCloud2ConstPtr& pointsMsg){
     HDF5_msg.type =pcl_type;
     HDF5_msg.compressed = hdf5data->getCompressed();
     HDF5_msg.compressed_level = hdf5data->getCompressed_level();
+    HDF5_msg.lsb = lsb;
     hdf5data->get_file_image2(HDF5_msg.hdf5data);
 
     //publish
@@ -65,11 +80,55 @@ int main( int argc, char** argv ){
     ros::init(argc,argv,"pointcloud_transport_pcl2hdf_node");
     ros::NodeHandle nh("~");
 
+    nh.param<bool>("type_float", float_flag, false);
+    ROS_INFO("%s: Type Float %d", ros::this_node::getName().c_str(), float_flag);
+    nh.param<float>("lsb", lsb, 0.002);
+    ROS_INFO("%s: LSB %f", ros::this_node::getName().c_str(), lsb);
+    
     nh.param<bool>("compressed", compressed, false);
+    ROS_INFO("%s: compressed %d", ros::this_node::getName().c_str(), compressed);
     nh.param<int>("compressed_level", compressed_level, 3);
+    ROS_INFO("%s: compressed_level %d", ros::this_node::getName().c_str(), compressed_level);
 
     ros::Subscriber pcl_sub = nh.subscribe("pointcloud", 10, &pointcloud_cb);
     hdf5_pub = nh.advertise<pointcloud_transport::PclHDF5>("pointcloud_hdf", 10);
+
+    /* Eigen Matrix Test */
+    /*
+    Eigen::MatrixXf mat(5,2);
+    mat(0,0) = 1.0; mat(1,0) = 2.0; mat(2,0) = 3.0; mat(3,0) = 0.0; mat(4,0) = 11;
+    mat(0,1) = 4.0; mat(1,1) = 5.0; mat(2,1) = 6.0; mat(3,1) = 0.0; mat(4,1) = 12;
+
+    Eigen::MatrixXf mat2(3, mat.cols());
+    mat2.block(0,0,3,mat.cols()) = mat.block(0,0,3,mat.cols())/lsb;
+    //mat2.block(4,0,1,mat.cols()) = mat.block(4,0,1,mat.cols());
+    mat2 = mat2.array() + 0.5; //ROUND UP
+    std::cout << mat2 << std::endl;    
+    std::cout << "test" << std::endl;
+    std::cout << sizeof(*(mat.data())) << std::endl;
+
+    Eigen::Matrix<unsigned short, Eigen::Dynamic, Eigen::Dynamic> mat3;
+    mat3 = mat2.cast<unsigned short>();
+    std::cout << sizeof(*(mat3.data())) << std::endl;
+    std::cout << mat3 << std::endl;
+
+    hdf5frame* hdf5data = new hdf5frame(compressed, compressed_level);
+    hdf5data->input<unsigned short>("/pointcloud_xyz", mat3, H5T_NATIVE_USHORT);
+    hdf5data->input<float>("pointcloud_intensity", mat.block(4,0,1,mat.cols()));
+    hdf5data->scan();
+
+    //Eigen::MatrixXf m = hdf5data->getMat<float>("/pointcloud_xyz");
+    Eigen::Matrix<unsigned short, -1, -1> mat_ret = hdf5data->getMat<unsigned short>("/pointcloud_xyz", H5T_NATIVE_USHORT);
+    Eigen::MatrixXf mat_intensity = hdf5data->getMat<float>("/pointcloud_intensity");
+    std::cout << "get matrix" << std::endl;
+    std::cout << mat_ret << std::endl;
+    std::cout << mat_intensity << std::endl;
+
+    Eigen::MatrixXf pc_mat = Eigen::MatrixXf::Zero(5,mat_ret.cols());
+    pc_mat.block(0,0,3,pc_mat.cols()) = mat_ret.cast<float>()*lsb;
+    pc_mat.block(4,0,1,pc_mat.cols()) = mat_intensity;
+    std::cout << pc_mat << std::endl;
+    */
 
     /*
     hdf5frame* hdf5data = new hdf5frame(compressed, compressed_level);
