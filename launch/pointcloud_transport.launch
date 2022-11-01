@@ -1,11 +1,16 @@
 <launch>
-  <node pkg="pointcloud_transport" type="pointcloud_transport_pcl2hdf_node" name="pointcloud_transport_pcl2hdf">
+
+  <node pkg="pointcloud_transport" type="pointcloud_transport_pcl2hdf_node" name="pointcloud_transport_pcl2hdf" output="screen">
     <remap from="~pointcloud" to="/kitti/velo/pointcloud" />
-    <param name="compressed" value="true" />
+    <param name="~compressed" value="true" />
+    <param name="~lsb" value="0.004" />
+    <param name="~voxel_grid_size" value="0.01" />    
+    <param name="~skip_rate" value="1" />    
   </node>
 
   <node pkg="pointcloud_transport" type="pointcloud_transport_hdf2pcl_node" name="pointcloud_transport_hdf2pcl" output="screen" >
     <remap from="~pointcloud_hdf" to="/pointcloud_transport_pcl2hdf/pointcloud_hdf" />
+    <param name="~com_udp" value="true" />
   </node>
 
 </launch>

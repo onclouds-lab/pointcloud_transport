@@ -5,9 +5,9 @@ void convertToEigen( pcl::PointCloud<pcl::PointXYZI>::Ptr pc, Eigen::MatrixXf& m
     mat = m.block(0,0,5,m.cols());
 }
 
-Eigen::Matrix<unsigned short, -1, -1> convertToUSHORT( Eigen::MatrixXf mat ){
-    Eigen::MatrixXf m = mat.array() + 0.5;
-    return(m.cast<unsigned short>());
+Eigen::Matrix<short, -1, -1> convertToSHORT( Eigen::MatrixXf mat ){
+    Eigen::MatrixXf m = round(mat.array());;
+    return(m.cast<short>());
 }
 
 ros::Publisher hdf5_pub;
@@ -79,8 +79,8 @@ void pointcloud_cb( const sensor_msgs::PointCloud2ConstPtr& pointsMsg){
         hdf5data->input("/pointcloud", m);
         hdf5data->scan();
     } else {
-        Eigen::Matrix<unsigned short, -1, -1> xyz_ushort = convertToUSHORT( m.block(0,0,3,m.cols())/lsb );
-        hdf5data->input<unsigned short>("/pointcloud_xyz", xyz_ushort, H5T_NATIVE_USHORT);
+        Eigen::Matrix<short, -1, -1> xyz_ushort = convertToSHORT( m.block(0,0,3,m.cols())/lsb );
+        hdf5data->input<short>("/pointcloud_xyz", xyz_ushort, H5T_NATIVE_SHORT);
         hdf5data->input<float>("/pointcloud_intensity", m.block(4,0,1,m.cols()));
         hdf5data->scan();
     }
@@ -107,7 +107,7 @@ int main( int argc, char** argv ){
 
     nh.param<bool>("type_float", float_flag, false);
     ROS_INFO("%s: Type Float %d", ros::this_node::getName().c_str(), float_flag);
-    nh.param<float>("lsb", lsb, 0.002);
+    nh.param<float>("lsb", lsb, 0.004);
     ROS_INFO("%s: LSB %f", ros::this_node::getName().c_str(), lsb);
     nh.param<float>("voxel_grid_size", voxelGridSize, 0.0);
     ROS_INFO("%s: Voxel Grid Size %f", ros::this_node::getName().c_str(), voxelGridSize);
@@ -126,28 +126,28 @@ int main( int argc, char** argv ){
     /*
     Eigen::MatrixXf mat(5,2);
     mat(0,0) = 1.0; mat(1,0) = 2.0; mat(2,0) = 3.0; mat(3,0) = 0.0; mat(4,0) = 11;
-    mat(0,1) = 4.0; mat(1,1) = 5.0; mat(2,1) = 6.0; mat(3,1) = 0.0; mat(4,1) = 12;
+    mat(0,1) = -4.0; mat(1,1) = -5.0; mat(2,1) = -6.0; mat(3,1) = 0.0; mat(4,1) = 12;
 
     Eigen::MatrixXf mat2(3, mat.cols());
     mat2.block(0,0,3,mat.cols()) = mat.block(0,0,3,mat.cols())/lsb;
     //mat2.block(4,0,1,mat.cols()) = mat.block(4,0,1,mat.cols());
-    mat2 = mat2.array() + 0.5; //ROUND UP
+    mat2 = round(mat2.array()); //ROUND UP
     std::cout << mat2 << std::endl;    
     std::cout << "test" << std::endl;
     std::cout << sizeof(*(mat.data())) << std::endl;
 
-    Eigen::Matrix<unsigned short, Eigen::Dynamic, Eigen::Dynamic> mat3;
-    mat3 = mat2.cast<unsigned short>();
+    Eigen::Matrix<short, Eigen::Dynamic, Eigen::Dynamic> mat3;
+    mat3 = mat2.cast<short>();
     std::cout << sizeof(*(mat3.data())) << std::endl;
     std::cout << mat3 << std::endl;
 
     hdf5frame* hdf5data = new hdf5frame(compressed, compressed_level);
-    hdf5data->input<unsigned short>("/pointcloud_xyz", mat3, H5T_NATIVE_USHORT);
+    hdf5data->input<short>("/pointcloud_xyz", mat3, H5T_NATIVE_SHORT);
     hdf5data->input<float>("pointcloud_intensity", mat.block(4,0,1,mat.cols()));
     hdf5data->scan();
 
     //Eigen::MatrixXf m = hdf5data->getMat<float>("/pointcloud_xyz");
-    Eigen::Matrix<unsigned short, -1, -1> mat_ret = hdf5data->getMat<unsigned short>("/pointcloud_xyz", H5T_NATIVE_USHORT);
+    Eigen::Matrix<short, -1, -1> mat_ret = hdf5data->getMat<short>("/pointcloud_xyz", H5T_NATIVE_SHORT);
     Eigen::MatrixXf mat_intensity = hdf5data->getMat<float>("/pointcloud_intensity");
     std::cout << "get matrix" << std::endl;
     std::cout << mat_ret << std::endl;

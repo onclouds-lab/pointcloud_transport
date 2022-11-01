@@ -30,7 +30,7 @@ void hdf_cb( const pointcloud_transport::PclHDF5::ConstPtr& HDF_msg){
         std::cout << m.rows() << " x " << m.cols() << std::endl;
         std::cout << m.block(0,0,5,5) << std::endl;
     } else {
-        Eigen::Matrix<unsigned short, -1, -1> mat_xyz = hdf5data->getMat<unsigned short>("/pointcloud_xyz", H5T_NATIVE_USHORT);
+        Eigen::Matrix<short, -1, -1> mat_xyz = hdf5data->getMat<short>("/pointcloud_xyz", H5T_NATIVE_SHORT);
         Eigen::MatrixXf mat_intensity = hdf5data->getMat<float>("/pointcloud_intensity");
         
         m = Eigen::MatrixXf::Zero(5,mat_xyz.cols());
